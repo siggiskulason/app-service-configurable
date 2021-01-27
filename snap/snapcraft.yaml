@@ -85,6 +85,16 @@ parts:
     prime:
       - "-*"
 
+  hooks:
+    source: ./hooks
+    plugin: make
+    after: [go]
+    override-build: |
+      cd $SNAPCRAFT_PART_SRC
+      make build
+      install -DT ./cmd/configure/configure "$SNAPCRAFT_PART_INSTALL/snap/hooks/configure"
+      install -DT ./cmd/install/install "$SNAPCRAFT_PART_INSTALL/snap/hooks/install"
+
   app-service-config:
     source: .
     plugin: make
@@ -105,12 +115,12 @@ parts:
       # create config dirs
       find ./res -maxdepth 1 -type d -exec install -d "$SNAPCRAFT_PART_INSTALL/config/"{} \;
 
-      # replace relative log paths in configuration.toml files with fully qualified paths
-      # prefixed with $SNAP_COMMON
-      find ./res -name "configuration.toml" | \
+      # install config files
+      # cp fails because the above command doesn't create the dirs under /config/sample
+      # due to the -maxdepth 1 option. The '>' doesn't have this limitation...
+      find ./res -maxdepth 2 -name "configuration.toml" | \
           while read fname; do
-               cat "$fname" | sed -e s:\./logs/:\\'$SNAP_COMMON/'\: > \
-              "$SNAPCRAFT_PART_INSTALL/config/$fname"
+               cat "$fname" > "$SNAPCRAFT_PART_INSTALL/config/$fname"
           done
 
       install -DT "./Attribution.txt" \
