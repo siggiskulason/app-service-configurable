@@ -53,6 +53,7 @@ apps:
     command: bin/service-wrapper.sh
     command-chain:
       - bin/startup-env-var.sh
+      - bin/security-secret-store-env-var.sh
     environment:
       SecretStore_TokenFile: $SNAP_DATA/edgex-application-service/secrets-token.json
       SecretStoreExclusive_TokenFile: $SNAP_DATA/edgex-application-service/secrets-token.json

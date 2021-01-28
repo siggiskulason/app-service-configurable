@@ -1,29 +1,32 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 
 /*
- * Copyright (C) 2017-2021 Canonical Ltd
+ * Copyright (C) 2021 Canonical Ltd
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  *
+ * SPDX-License-Identifier: Apache-2.0'
  */
 
 package hooks
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -103,6 +106,80 @@ func (cc *CtlCli) Stop(svc string, disable bool) error {
 	err := cmd.Run()
 	if err != nil {
 		return errors.New(fmt.Sprintf("snapctl stop failed - %v", err))
+	}
+
+	return nil
+}
+
+// p is the current prefix of the config key being processed (e.g. "service", "security.auth")
+// k is the key name of the current JSON object being processed
+// vJSON is the current object
+// flatConf is a map containing the configuration keys/values processed thus far
+func flattenConfigJSON(p string, k string, vJSON interface{}, flatConf map[string]string) {
+	var mk string
+
+	// top level keys don't include "env", so no separator needed
+	if p == "" {
+		mk = k
+	} else {
+		mk = fmt.Sprintf("%s.%s", p, k)
+	}
+
+	switch t := vJSON.(type) {
+	case string:
+		flatConf[mk] = t
+	case bool:
+		flatConf[mk] = strconv.FormatBool(t)
+	case float64:
+		flatConf[mk] = strconv.FormatFloat(t, 'f', -1, 64)
+	case map[string]interface{}:
+
+		for k, v := range t {
+			flattenConfigJSON(mk, k, v, flatConf)
+		}
+	default:
+		panic(fmt.Sprintf("internal error: invalid JSON configuration from snapd - prefix: %s key: %s obj: %v", p, k, t))
+	}
+}
+
+// HandleEdgeXConfig processes snap configuration which can be used to override
+// app-service-configurable configuration via environment variables sourced by
+// the snap service wrapper script.
+func HandleEdgeXConfig(envJSON string) error {
+
+	if envJSON == "" {
+		return nil
+	}
+
+	var m map[string]interface{}
+	var flatConf = make(map[string]string)
+
+	err := json.Unmarshal([]byte(envJSON), &m)
+	if err != nil {
+		return errors.New(fmt.Sprintf("failed to unmarshall EdgeX config - %v", err))
+	}
+
+	for k, v := range m {
+		flattenConfigJSON("", k, v, flatConf)
+	}
+
+	b := bytes.Buffer{}
+	for k, v := range flatConf {
+		env, ok := ConfToEnv[k]
+		if !ok {
+			return errors.New(fmt.Sprintf("invalid EdgeX config option - %s", k))
+		}
+
+		_, err := fmt.Fprintf(&b, "export %s=%s\n", env, v)
+		if err != nil {
+			return err
+		}
+	}
+
+	path := fmt.Sprintf("%s/config/res/service.env", SnapData)
+	err = ioutil.WriteFile(path, b.Bytes(), 0644)
+	if err != nil {
+		return errors.New(fmt.Sprintf("failed to write service.env file - %v", err))
 	}
 
 	return nil

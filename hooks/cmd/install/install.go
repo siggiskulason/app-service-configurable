@@ -3,46 +3,37 @@
 /*
  * Copyright (C) 2021 Canonical Ltd
  *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at
  *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
  *
+ * SPDX-License-Identifier: Apache-2.0'
  */
 
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log/syslog"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/canonical/app-service-configurable/hooks"
 )
 
-var log syslog.Writer
+var log *syslog.Writer
 
-func handleDirs() error {
+// installProfiles copies the profile configuration.toml files from $SNAP to $SNAP_DATA.
+func installProfiles() error {
 	dataConfP := fmt.Sprintf("%s/config/res", hooks.SnapData)
 	snapConfP := fmt.Sprintf("%s/config/res", hooks.Snap)
-
-	// install all the config files from $SNAP/config/res/ into $SNAP_DATA/config/res/,
-	// but if files already exist, don't over-write
-	//err := os.MkdirAll(dataConfP, 0755)
-	//if err != nil {
-	// return errors.New(fmt.Sprintf("Can't make %s - %v", dataConfP, err))
-	//}
 
 	configFiles, err := filepath.Glob(filepath.Join(snapConfP, "*", "configuration.toml"))
 	if err != nil {
@@ -77,85 +68,9 @@ func handleDirs() error {
 	return nil
 }
 
-// TODO: merge w/configure version
-func handleVal(p string, k string, v interface{}, flatConf map[string]interface{}) {
-	var mk string
-
-	// top level keys don't include "env", so no separator needed
-	if p == "" {
-		mk = k
-	} else {
-		mk = fmt.Sprintf("%s.%s", p, k)
-	}
-
-	log.Debug(fmt.Sprintf("handleVal: mk: %s", mk))
-
-	switch t := v.(type) {
-	case string:
-		log.Debug(fmt.Sprintf("ADDING %s=%s to flatConf", k, t))
-		flatConf[mk] = t
-	case bool:
-		log.Debug(fmt.Sprintf("ADDING %s=%v to flatConf", k, t))
-		flatConf[mk] = strconv.FormatBool(t)
-	case float64:
-		log.Debug(fmt.Sprintf("ADDING %s=%v to flatConf", k, t))
-		flatConf[mk] = strconv.FormatFloat(t, 'f', -1, 64)
-	case map[string]interface{}:
-		log.Debug(fmt.Sprintf("FOUND AN OBJECT"))
-
-		for k, v := range t {
-			handleVal(mk, k, v, flatConf)
-		}
-	default:
-		log.Err("I DON'T KNOW!!!!")
-	}
-}
-
-// TODO: merge w/configure version
-func handleSvcConf(env string) {
-	log.Debug(fmt.Sprintf("edgex-asc:install:handleSvcConf config is %s", env))
-
-	if env == "" {
-		return
-	}
-
-	var m map[string]interface{}
-	var flatConf = make(map[string]interface{})
-	//flatM = make(map[string]interface{})
-
-	err := json.Unmarshal([]byte(env), &m)
-	if err != nil {
-		log.Err(fmt.Sprintf("edgex-asc:configure:handleSvcConf: failed to unmarshall env; %v", err))
-		return
-	}
-
-	for k, v := range m {
-		handleVal("", k, v, flatConf)
-	}
-
-	path := fmt.Sprintf("%s/config/res/service.env", hooks.SnapData)
-
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		log.Err(fmt.Sprintf("edgex-asc:configure:handleSvcConf: can't open %s - %v", path, err))
-		os.Exit(1)
-	}
-
-	defer f.Close()
-
-	log.Debug(fmt.Sprintf("edgex-asc:configure:handleSvcConf about write %s", path))
-	for k, v := range flatConf {
-		log.Debug(fmt.Sprintf("%s=%v", k, v))
-		_, err := f.WriteString(fmt.Sprintf("export %s=%s\n", hooks.ConfToEnv[k], v))
-		if err != nil {
-			log.Err(fmt.Sprintf("edgex-asc:configure:handleSvcConf: can't open %s - %v", path, err))
-			os.Exit(1)
-		}
-	}
-}
-
 func main() {
-	log, err := syslog.New(syslog.LOG_INFO, "edgex-asc:install")
+	var err error
+	log, err = syslog.New(syslog.LOG_INFO, "edgex-asc:install")
 	if err != nil {
 		return
 	}
@@ -166,7 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = handleDirs()
+	err = installProfiles()
 	if err != nil {
 		log.Crit(fmt.Sprintf("edgex-asc:install: %v", err))
 		os.Exit(1)
@@ -179,21 +94,26 @@ func main() {
 	// with a device profile that will be specific to each installation
 	err = cli.Stop(svc, true)
 	if err != nil {
-		log.Crit(fmt.Sprintf("edgex-asc:install: can't stop service - %v", err))
+		log.Crit(fmt.Sprintf("Can't stop service - %v", err))
 		os.Exit(1)
 	}
 
 	// set default profile
 	err = cli.SetConfig(hooks.ProfileConfig, hooks.DefaultProfile)
 	if err != nil {
-		log.Crit(fmt.Sprintf("edgex-asc:install: can't SET DEFAULT PROFILE - %v", err))
+		log.Crit(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
 		os.Exit(1)
 	}
 
-	env, err := cli.Config(hooks.EnvConfig)
+	envJSON, err := cli.Config(hooks.EnvConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("edgex-asc:install: error reading config key 'env' - %v", err))
+		log.Crit(fmt.Sprintf("Reading config 'env' failed: %v", err))
 		os.Exit(1)
 	}
-	handleSvcConf(env)
+
+	err = hooks.HandleEdgeXConfig(envJSON)
+	if err != nil {
+		log.Crit(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
+		os.Exit(1)
+	}
 }

@@ -9,6 +9,7 @@ cmd/configure/configure:
 cmd/install/install:
 	$(GO) build -o $@ ./cmd/install
 
+# TODO: fixup unit testing
 test:
 	$(GO) test -coverprofile=coverage.out ./...
 	$(GO) vet ./...
