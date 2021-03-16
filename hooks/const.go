@@ -19,6 +19,7 @@
 package hooks
 
 const (
+	AutostartConfig     = "autostart"
 	EnvConfig           = "env"
 	ProfileConfig       = "profile"
 	DefaultProfile      = "default"

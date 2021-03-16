@@ -24,6 +24,7 @@ import (
 	"log/syslog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/canonical/app-service-configurable/hooks"
 )
@@ -90,19 +91,46 @@ func main() {
 	cli := hooks.NewSnapCtl()
 	svc := fmt.Sprintf("%s.app-service-configurable", hooks.SnapInst)
 
-	// disable app-service-configurable initially because it specific requires configuration
-	// with a device profile that will be specific to each installation
-	err = cli.Stop(svc, true)
+	autostart, err := cli.Config(hooks.AutostartConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Can't stop service - %v", err))
+		log.Crit(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
 		os.Exit(1)
 	}
 
-	// set default profile
-	err = cli.SetConfig(hooks.ProfileConfig, hooks.DefaultProfile)
-	if err != nil {
-		log.Crit(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
+	// TODO: move profile config before autostart, if profile=default, or
+	// no configuration file exists for the profile, then ignore autostart
+
+	switch strings.ToLower(autostart) {
+	case "true":
+	case "yes":
+		break
+	case "":
+	case "no":
+		// disable app-service-configurable initially because it specific requires configuration
+		// with a device profile that will be specific to each installation
+		err = cli.Stop(svc, true)
+		if err != nil {
+			log.Crit(fmt.Sprintf("Can't stop service - %v", err))
+			os.Exit(1)
+		}
+	default:
+		log.Crit(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
 		os.Exit(1)
+	}
+
+	profile, err := cli.Config(hooks.ProfileConfig)
+	if err != nil {
+		log.Crit(fmt.Sprintf("Reading config 'profile' failed: %v", err))
+		os.Exit(1)
+	}
+
+	if profile == "" {
+		// set default profile
+		err = cli.SetConfig(hooks.ProfileConfig, hooks.DefaultProfile)
+		if err != nil {
+			log.Crit(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
+			os.Exit(1)
+		}
 	}
 
 	envJSON, err := cli.Config(hooks.EnvConfig)
