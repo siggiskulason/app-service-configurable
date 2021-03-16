@@ -3,10 +3,6 @@
 
 This folder contains snap packaging for the EdgeX Foundry's App Service Configurable application service.
 
-The project maintains a rolling release of the snap on the `edge` channel that is rebuilt and published at least once daily through the jenkins jobs setup for the EdgeX project. You can see the jobs run [here](https://jenkins.edgexfoundry.org/view/Snap/) specifically looking at the `edgex-app-service-configurable-snap-{branch}-stage-snap`.
-
-The snap currently supports both `amd64` and `arm64` platforms.
-
 ## Installation
 
 ### Installing snapd
@@ -33,11 +29,54 @@ $ sudo snap install edgex-app-service-configurable
 **Note** - this snap has only been tested on Ubuntu Desktop/Server 16.04 LTS (or greater) and Ubuntu Core 16 (or greater).
 
 ## Using the EdgeX App Service Configurable snap
+The App Service Configurable application service allows a variety of use cases to be met by simply providing configuration (vs. writing code). For more information about this service, please refer to the top-level [README.md](https://github.com/edgexfoundry/app-service-configurable/blob/hanoi/README.md) fil
+e. As with some device service snaps, this service is disabled by default when first installed (although this can be overridden). This allows a profile to be specified (required), and any required configuration changes to be made prior to the service being enabled/started.
 
-The App Service Configurable application service allows a variety of use cases to be met by simply providing configuration (vs. writing code). For more information about this service, please refer to the README. As with device-mqtt, this service is disabled when first installed, as it requires configuration changes before it can be run. As with the device-mqtt snap, the configuration.toml file is found in the snap’s writable area:
+### Profiles
+On install, all of the services profile-specific ```configuration.toml``` files are copied to sub-directories found in the snap's writable area:
 
-
+```
 /var/snap/edgex-app-service-configurable/current/config/res/
+```
+
+To configure a specific profile use the ```snap set``` command:
+
+```
+$ sudo snap set edgex-app-service-configurable profile=push-to-core
+```
+
+In addition to instructing the service to read a different configuration file, the profile will also be used to name the service when it registers itself to the system.
+
+### Autostart
+By default, the edgex-app-service-configurable snap disables the service on install, as the expectation is that the default profile configuration files will be customized, and thus this behavior allows the profile ```configuration.toml``` files in $SNAP_DATA to be modified before the service is first started.
+
+This behavior can be overridden by setting the ```autostart``` is set to "true". This is useful when one or more configuration profiles are being provided via configuration or gadget snap content interface. If specified, care also needs to be taken to also ensure that profile has been set to a valid profile.
+
+**Note** - this option is typically set from a gadget snap.
+
+### Rich Configuration
+While it's possible on Ubuntu Core to provide additional profiles via gadget snap content interface, quite often only minor changes to
+existing profiles are required. These changes can be accomplished via support for EdgeX environment variable configuration overrides via
+the snap's configure and install hooks. If the service has already been started, setting one of these overrides currently requires the
+service to be restarted via the command-line or snapd's REST API. If the overrides are provided via the snap configuration defaults
+capability of a gadget snap, the overrides will be picked up when the services are first started.
+
+The following syntax is used to specify service-specific configuration overrides:
+
+
+```env.<stanza>.<config option>```
+
+For instance, to setup an override of the service's Port use:
+
+```$ sudo snap set env.service.port=2112```
+
+And restart the service:
+
+```$ sudo snap restart edgex-app-service-configurable```
+
+**Note** - at this time changes to configuration values in the [Writable] section are not supported.
+
+For details on the mapping of configuration options to Config options, please refer to "Appendix A - edgex-app-service-configurable Configuration options".
 
 ### Startup environment variables
 
@@ -56,13 +95,6 @@ $ sudo snap set edgex-app-service-configurable startup-interval=1
 ```
 
 **Note** - Should the environment variables be modified after the service has started, the service must be restarted.
-
-### Profiles
-In additional to base configuration.toml in this directory, there are a number of sub-directories that also contain configuration.toml files. These sub-directories are referred to as profiles. The service’s default behavior is to use the configuration.toml file from the /res directory. If you want to use one of the profiles, use the snap set command to instruct the service to read its configuration from one of these sub-directories. For example, to use the push-to-core profile you would run:
-```
-$ sudo snap set edgex-app-service-configurable profile=push-to-core
-```
-In addition to instructing the service to read a different configuration file, the profile will also be used to name the service when it registers itself to the system.
 
 ### Multiple Instances
 Multiple instances of edgex-app-service-configurable can be installed by using snap [Parallel Installs](https://snapcraft.io/docs/parallel-installs). This is an experimental snap feature and must be first be enabled by running this command:
@@ -86,21 +118,94 @@ Some profile configuration.toml files specify configuration which requires Secre
 sudo snap set edgex-app-service-configurable security-secret-store=false
 ```
 
-### Manually configure the Secret Store (aka Vault) token
-Here's an example of how to use a configuration/profile which includes secrets:
+## Configuration Options
+This section documents the edgex-app-service-configurable's configuration options.
+
+### Autostart
+```autostart								// true | yes```
+
+### API Gateway
+```env.security-proxy.add-proxy-routes				// ADD_PROXY_ROUTES```
+
+### Secret Store
+```env.security-secret-store.add-secretstore-tokens		// ADD_SECRETSTORE_TOKENS```
+
+### Service Environment Configuration Overrides
+**Note** - all of the configuration options below must be specified with the prefix: 'env.'
 
 ```
-$ sudo snap install edgex-app-service-configurable
-$ sudo snap set edgex-app-service-configurable profile=mqtt-export
-$ cd /var/snap/edgex-app-service-configurable/current/config/res/mqtt-export
-$ sudo cp /var/snap/edgexfoundry/current/secrets/edgex-application-service/secrets-token.json .
+[Service]
+service.boot-timeout            // Service.BootTimeout
+service.check-interval          // Service.CheckInterval
+service.host                    // Service.Host
+service.server-bind-addr        // Service.ServerBindAddr
+service.port                    // Service.Port
+service.protocol                // Service.Protocol
+service.read-max-limit          // Service_ReadMaxLimit
+service.startup-msg             // Service.StartupMsg
+service.timeout                 // Service.Timeout
+
+[Registry]
+registry.host                   // Registry.Host
+registry.port                   // Registry.Port
+registry.type                   // Registry.Type
+
+[Database]
+database.primary.type           // Database.Type
+database.host                   // Database.Host
+database.primary.port           // Database.Port
+database.primary.timeout        // Database.Timeout
+
+[SecretStore]
+secretstore.host                       // SecretStore.Host
+secretstore.port                       // SecretStore.Port
+secretstore.path                       // SecretStore.Path
+secretstore.protocol                   // SecretStore.Protocol
+secretstore.root-ca-cert-path          // SecretStore.RootCaCertPath
+secretstore.server-name                // SecretStore.ServerName
+secretstore.token-file                 // SecretStore.TokenFile
+secretstore.additional-retry-attempts  // SecretStore.AdditionalRetryAttempts
+secretstore.retry-wait-period          // SecretStore.RetryWaitPeriod
+
+[SecretStore.Authentication]
+secretstore.authentication.auth-type   // SecretStore.Authentication.AuthType
+
+[SecretStoreExclusive]
+secretstore-ex.host                    // SecretStoreExclusive.Host
+secretstore-ex.port                    // SecretStoreExclusive.Port
+secretstore-ex.path                    // SecretStoreExclusive.Path
+secretstore-ex.protocol                // SecretStoreExclusive.Protocol
+secretstore-ex.root-ca-cert-path       // SecretStoreExclusive.RootCaCertPath
+secretstore-ex.server-name             // SecretStoreExclusive.ServerName
+secretstore-ex.token-file              // SecretStoreExclusive.TokenFile
+
+secretstore-ex.additional-retry-attempts // SecretStoreExclusive.AdditionalRetryAttempts
+secretstore-ex.retry-wait-period         // SecretStoreExclusive.RetryWaitPeriod
+
+[SecretStoreExclusive.Authentication]
+secretstore-ex.authentication.auth-type  // SecretStoreExclusive.Authentication.AuthType
+
+[Clients.CoreData]
+clients.data.host                 // Clients.Data.Host
+clients.data.port                 // Clients.Data.Port
+clients.data.protocol             // Clients.Data.Protocol
+
+**Note** - the key used vs. the key used for the edgexfoundry snap (e.g. Data).
+
+[Binding]
+binding.subscribe-topic           // Binding.Subscribe_Topic
+binding.publish-topic             // Binding.PublishTopic
+
+[MessageBus]
+message-bus.type                  // MessageBus.Type
+
+[MessageBus.SubscribeHost]
+message-bus.subscribe-host.host      // MessageBus.SubscribeHost.Host
+message-bus.subscribe-host.port      // MessageBus.SubscribeHost.Port
+message-bus.subscribe-host.protocol  // MessageBus.SubscribeHost.Protocol
+
+[MessageBus.PublishHost]
+message-bus.publish-host.host        // MessageBus.PublishHost.Host
+message-bus.publish-host.port        // MessageBus.PublishHost.Port
+message-bus.publish-host.protocol    // MessageBus.PublishHost.Protocol
 ```
-
-Next the profile's ```configuration.toml``` file (see ```/var/snap/edgex-app-service-configurable/current/config/res/mqtt-export```) needs to be updated to reference the new token file location in ```$SNAP_DATA```. The config field that need updated is ```SecretStore.TokenFile```. The following example shows how this can be done via the sed command-line tool, however the file can also be easily updated via your favorite editor.
-
-
-```
-$ sudo sed -i -e 's@/vault/config/assets/resp-init.json@/var/snap/edgex-app-service-configurable/current/config/res/mqtt-export/secrets-token.json@' ./configuration.toml
-```
-
-**Note** -- these configuration changes need to be made *before* the service is started for the first time. Otherwise, the recommended approach is to stop the service, delete the existing app-service-configurable configuration in Consul's kv store, and then proceed.
