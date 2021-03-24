@@ -76,7 +76,27 @@ And restart the service:
 
 **Note** - at this time changes to configuration values in the [Writable] section are not supported.
 
-For details on the mapping of configuration options to Config options, please refer to "Appendix A - edgex-app-service-configurable Configuration options".
+For details on the mapping of configuration options to Config options, please refer to "Service Environment Configuration Overrides".
+
+### Providing additional configuration profiles
+While configuration overrides are a powerful feature, there are certain scenarios (i.e. a profile with a very custom pipeline defined) where being able
+to provide additional configuration profiles is desired. The edgex-app-service-configurable snap supports provisioning of additional configuration
+profiles via content interface. This allows another snap on the system (e.g. a configuration or gadget snap) to declare one or more content interface
+slots that when connected with this snap, allow access to these new profiles.
+
+Here's an example content interface slot definition for a snap providing a single new configuration profile called "mqtt-export-inventory". Ex.
+
+```
+slots:
+  edgex-profiles-config:
+    interface: content
+    content: edgex-profiles-config
+    source:
+      read: [$SNAP/mqtt-export-inventory]
+```
+
+**Note** - the content interface needs to first be connected before the file(s) become visible to app-service-configurable. For more information
+on content interfaces, please refer to the [documentation](https://snapcraft.io/docs/content-interface).
 
 ### Startup environment variables
 
@@ -118,19 +138,7 @@ Some profile configuration.toml files specify configuration which requires Secre
 sudo snap set edgex-app-service-configurable security-secret-store=off
 ```
 
-## Configuration Options
-This section documents the edgex-app-service-configurable's configuration options.
-
-### Autostart
-```autostart								// true | yes```
-
-### API Gateway
-```env.security-proxy.add-proxy-routes				// ADD_PROXY_ROUTES```
-
-### Secret Store
-```env.security-secret-store.add-secretstore-tokens		// ADD_SECRETSTORE_TOKENS```
-
-### Service Environment Configuration Overrides
+## Service Environment Configuration Overrides
 **Note** - all of the configuration options below must be specified with the prefix: 'env.'
 
 ```
