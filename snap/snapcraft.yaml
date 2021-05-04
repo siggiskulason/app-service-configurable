@@ -105,12 +105,8 @@ parts:
     override-pull: |
       snapcraftctl pull
       cd $SNAPCRAFT_PROJECT_DIR
-      if [ -f VERSION ]; then
-        PROJECT_VERSION=$(cat VERSION)
-      else
-        PROJECT_VERSION=local-dev
-      fi
-      snapcraftctl set-version ${PROJECT_VERSION}
+      GIT_VERSION=$(git describe --tags --abbrev=0 | sed 's/v//')
+      snapcraftctl set-version ${GIT_VERSION}
     override-build: |
       cd $SNAPCRAFT_PART_SRC
       make build
