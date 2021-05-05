@@ -21,26 +21,25 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log/syslog"
 	"os"
 
-	"github.com/canonical/app-service-configurable/hooks"
+	hooks "github.com/canonical/edgex-snap-hooks"
 )
 
-var log *syslog.Writer
+var cli *hooks.CtlCli = hooks.NewSnapCtl()
 
 // validateProfile processes the snap 'profile' configure option, ensuring that the directory
 // and associated configuration.toml file in $SNAP_DATA both exist.
 //
 func validateProfile(prof string) error {
-	log.Debug(fmt.Sprintf("edgex-asc:configure:validateProfile: profile is %s", prof))
+	hooks.Debug(fmt.Sprintf("edgex-asc:configure:validateProfile: profile is %s", prof))
 
-	if prof == "" || prof == hooks.DefaultProfile {
+	if prof == "" || prof == "default" {
 		return nil
 	}
 
 	path := fmt.Sprintf("%s/config/res/%s/configuration.toml", hooks.SnapData, prof)
-	log.Debug(fmt.Sprintf("edgex-asc:configure:validateProfile: checking if %s exists", path))
+	hooks.Debug(fmt.Sprintf("edgex-asc:configure:validateProfile: checking if %s exists", path))
 
 	_, err := os.Stat(path)
 	if err != nil {
@@ -51,46 +50,47 @@ func validateProfile(prof string) error {
 }
 
 func main() {
+	var debug = false
 	var err error
 	var envJSON, prof string
 
-	log, err = syslog.New(syslog.LOG_INFO, "edgex-asc:configure")
+	status, err := cli.Config("debug")
 	if err != nil {
-		log.Crit(fmt.Sprintf("Creating new syslog instance failed: %v", err))
+		fmt.Println(fmt.Sprintf("edgex-asc:configure: can't read value of 'debug': %v", err))
 		os.Exit(1)
 	}
-
-	err = hooks.GetEnvVars()
-	if err != nil {
-		log.Crit(fmt.Sprintf("Error reading SNAP environment variables: %v", err))
-		os.Exit(1)
+	if status == "true" {
+		debug = true
 	}
 
-	log.Debug("edgex-asc:configure hook running")
+	if err = hooks.Init(debug, "edgex-app-service-configurable"); err != nil {
+		fmt.Println(fmt.Sprintf("edgex-asc:configure: initialization failure: %v", err))
+		os.Exit(1)
+
+	}
 
 	cli := hooks.NewSnapCtl()
-
 	prof, err = cli.Config(hooks.ProfileConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Error reading config 'profile': %v", err))
+		hooks.Error(fmt.Sprintf("Error reading config 'profile': %v", err))
 		os.Exit(1)
 	}
 
 	validateProfile(prof)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Error validating profile: %v", err))
+		hooks.Error(fmt.Sprintf("Error validating profile: %v", err))
 		os.Exit(1)
 	}
 
 	envJSON, err = cli.Config(hooks.EnvConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Reading config 'env' failed: %v", err))
+		hooks.Error(fmt.Sprintf("Reading config 'env' failed: %v", err))
 		os.Exit(1)
 	}
 
-	err = hooks.HandleEdgeXConfig(envJSON)
+	err = hooks.HandleEdgeXConfig("app-service-configurable", envJSON, nil)
 	if err != nil {
-		log.Crit(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
+		hooks.Error(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
 		os.Exit(1)
 	}
 }

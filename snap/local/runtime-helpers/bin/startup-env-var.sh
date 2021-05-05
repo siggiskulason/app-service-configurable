@@ -12,7 +12,7 @@ if [ -n "$EDGEX_STARTUP_INTERVAL" ]; then
   export EDGEX_STARTUP_INTERVAL
 fi
 
-SERVICE_ENV="$SNAP_DATA/config/res/service.env"
+SERVICE_ENV="$SNAP_DATA/config/res/app-service-configurable.env"
 logger "edgex service override: : SERVICE_ENV=$SERVICE_ENV"
 
 if [ -f "$SERVICE_ENV" ]; then
