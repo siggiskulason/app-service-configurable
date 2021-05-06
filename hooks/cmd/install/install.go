@@ -21,15 +21,14 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"log/syslog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/canonical/app-service-configurable/hooks"
+	hooks "github.com/canonical/edgex-snap-hooks"
 )
 
-var log *syslog.Writer
+var cli *hooks.CtlCli = hooks.NewSnapCtl()
 
 // installProfiles copies the profile configuration.toml files from $SNAP to $SNAP_DATA.
 func installProfiles() error {
@@ -70,21 +69,27 @@ func installProfiles() error {
 }
 
 func main() {
+	var debug = false
 	var err error
-	log, err = syslog.New(syslog.LOG_INFO, "edgex-asc:install")
+
+	status, err := cli.Config("debug")
 	if err != nil {
-		return
+		fmt.Println(fmt.Sprintf("edgex-asc:install: can't read value of 'debug': %v", err))
+		os.Exit(1)
+	}
+	if status == "true" {
+		debug = true
 	}
 
-	err = hooks.GetEnvVars()
-	if err != nil {
-		log.Crit(fmt.Sprintf("edgex-asc:install: %v", err))
+	if err = hooks.Init(debug, "edgex-app-service-configurable"); err != nil {
+		fmt.Println(fmt.Sprintf("edgex-asc:install: initialization failure: %v", err))
 		os.Exit(1)
+
 	}
 
 	err = installProfiles()
 	if err != nil {
-		log.Crit(fmt.Sprintf("edgex-asc:install: %v", err))
+		hooks.Error(fmt.Sprintf("edgex-asc:install: %v", err))
 		os.Exit(1)
 	}
 
@@ -93,7 +98,7 @@ func main() {
 
 	autostart, err := cli.Config(hooks.AutostartConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
+		hooks.Error(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
 		os.Exit(1)
 	}
 
@@ -110,38 +115,38 @@ func main() {
 		// with a device profile that will be specific to each installation
 		err = cli.Stop(svc, true)
 		if err != nil {
-			log.Crit(fmt.Sprintf("Can't stop service - %v", err))
+			hooks.Error(fmt.Sprintf("Can't stop service - %v", err))
 			os.Exit(1)
 		}
 	default:
-		log.Crit(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
+		hooks.Error(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
 		os.Exit(1)
 	}
 
 	profile, err := cli.Config(hooks.ProfileConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Reading config 'profile' failed: %v", err))
+		hooks.Error(fmt.Sprintf("Reading config 'profile' failed: %v", err))
 		os.Exit(1)
 	}
 
 	if profile == "" {
 		// set default profile
-		err = cli.SetConfig(hooks.ProfileConfig, hooks.DefaultProfile)
+		err = cli.SetConfig(hooks.ProfileConfig, "default")
 		if err != nil {
-			log.Crit(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
+			hooks.Error(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
 			os.Exit(1)
 		}
 	}
 
 	envJSON, err := cli.Config(hooks.EnvConfig)
 	if err != nil {
-		log.Crit(fmt.Sprintf("Reading config 'env' failed: %v", err))
+		hooks.Error(fmt.Sprintf("Reading config 'env' failed: %v", err))
 		os.Exit(1)
 	}
 
-	err = hooks.HandleEdgeXConfig(envJSON)
+	err = hooks.HandleEdgeXConfig("app-service-configurable", envJSON, nil)
 	if err != nil {
-		log.Crit(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
+		hooks.Error(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
 		os.Exit(1)
 	}
 }
