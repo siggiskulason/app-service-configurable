@@ -32,6 +32,11 @@ confinement: strict
 # geneva release is epoch 3
 epoch: 3
 
+hooks:
+  install:
+    command-chain:
+      - bin/debug.sh
+
 plugs:
   # This content plug allows new profiles to be added to the service via a config
   # or gadget snap that defines a matching slot.
