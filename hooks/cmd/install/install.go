@@ -70,6 +70,7 @@ func installProfiles() error {
 
 func main() {
 	var debug = false
+	var disable = false
 	var err error
 
 	status, err := cli.Config("debug")
@@ -93,36 +94,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	cli := hooks.NewSnapCtl()
-	svc := fmt.Sprintf("%s.app-service-configurable", hooks.SnapInst)
-
-	autostart, err := cli.Config(hooks.AutostartConfig)
-	if err != nil {
-		hooks.Error(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
-		os.Exit(1)
-	}
-
-	// TODO: move profile config before autostart, if profile=default, or
-	// no configuration file exists for the profile, then ignore autostart
-
-	switch strings.ToLower(autostart) {
-	case "true":
-	case "yes":
-		break
-	case "":
-	case "no":
-		// disable app-service-configurable initially because it specific requires configuration
-		// with a device profile that will be specific to each installation
-		err = cli.Stop(svc, true)
-		if err != nil {
-			hooks.Error(fmt.Sprintf("Can't stop service - %v", err))
-			os.Exit(1)
-		}
-	default:
-		hooks.Error(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
-		os.Exit(1)
-	}
-
 	profile, err := cli.Config(hooks.ProfileConfig)
 	if err != nil {
 		hooks.Error(fmt.Sprintf("Reading config 'profile' failed: %v", err))
@@ -134,6 +105,42 @@ func main() {
 		err = cli.SetConfig(hooks.ProfileConfig, "default")
 		if err != nil {
 			hooks.Error(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
+			os.Exit(1)
+		}
+	}
+
+	// If autostart is not explicitly set, default to "no"
+	// as only example service configuration and profiles
+	// are provided by default.
+	autostart, err := cli.Config(hooks.AutostartConfig)
+	if err != nil {
+		hooks.Error(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
+		os.Exit(1)
+	}
+	if autostart == "" {
+		hooks.Debug("edgex-asc: autostart is NOT set, initializing to 'no'")
+		autostart = "no"
+	}
+
+	autostart = strings.ToLower(autostart)
+	if autostart == "true" || autostart == "yes" {
+		if profile == "default" {
+			hooks.Warn(fmt.Sprintf("autostart is %s, but no profile set", autostart))
+			disable = true
+		}
+	} else if autostart == "false" || autostart == "no" {
+		disable = true
+	} else {
+		hooks.Error(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
+		os.Exit(1)
+	}
+
+	// disable because there's no initial configuration or autostart has
+	// been explicitly set to false|no.
+	if disable {
+		err = cli.Stop("app-service-configurable", true)
+		if err != nil {
+			hooks.Error(fmt.Sprintf("Can't stop service - %v", err))
 			os.Exit(1)
 		}
 	}
