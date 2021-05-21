@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	hooks "github.com/canonical/edgex-snap-hooks"
 )
@@ -34,7 +35,7 @@ var cli *hooks.CtlCli = hooks.NewSnapCtl()
 func validateProfile(prof string) error {
 	hooks.Debug(fmt.Sprintf("edgex-asc:configure:validateProfile: profile is %s", prof))
 
-	if prof == "" || prof == "default" {
+	if prof == "" {
 		return nil
 	}
 
@@ -51,6 +52,7 @@ func validateProfile(prof string) error {
 
 func main() {
 	var debug = false
+	var enable = true
 	var err error
 	var envJSON, prof string
 
@@ -69,7 +71,6 @@ func main() {
 
 	}
 
-	cli := hooks.NewSnapCtl()
 	prof, err = cli.Config(hooks.ProfileConfig)
 	if err != nil {
 		hooks.Error(fmt.Sprintf("Error reading config 'profile': %v", err))
@@ -92,5 +93,41 @@ func main() {
 	if err != nil {
 		hooks.Error(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
 		os.Exit(1)
+	}
+
+	// If autostart is not explicitly set, default to "no"
+	// as only example service configuration and profiles
+	// are provided by default.
+	autostart, err := cli.Config(hooks.AutostartConfig)
+	if err != nil {
+		hooks.Error(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
+		os.Exit(1)
+	}
+	if autostart == "" {
+		hooks.Debug("edgex-asc: autostart is NOT set, initializing to 'no'")
+		autostart = "no"
+	}
+
+	autostart = strings.ToLower(autostart)
+	if autostart == "true" || autostart == "yes" {
+		if prof == "" {
+			hooks.Warn(fmt.Sprintf("autostart is %s, but no profile set", autostart))
+			enable = false
+		}
+	} else if autostart == "false" || autostart == "no" {
+		enable = false
+	} else {
+		hooks.Error(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
+		os.Exit(1)
+	}
+
+	// service is stopped/disabled by default in the install hook
+	// only enable if profile exists and autstart is set
+	if enable {
+		err = cli.Start("app-service-configurable", true)
+		if err != nil {
+			hooks.Error(fmt.Sprintf("Can't start service - %v", err))
+			os.Exit(1)
+		}
 	}
 }
