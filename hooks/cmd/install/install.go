@@ -23,7 +23,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 
 	hooks "github.com/canonical/edgex-snap-hooks"
 )
@@ -69,20 +68,9 @@ func installProfiles() error {
 }
 
 func main() {
-	var debug = false
-	var disable = false
 	var err error
 
-	status, err := cli.Config("debug")
-	if err != nil {
-		fmt.Println(fmt.Sprintf("edgex-asc:install: can't read value of 'debug': %v", err))
-		os.Exit(1)
-	}
-	if status == "true" {
-		debug = true
-	}
-
-	if err = hooks.Init(debug, "edgex-app-service-configurable"); err != nil {
+	if err = hooks.Init(false, "edgex-app-service-configurable"); err != nil {
 		fmt.Println(fmt.Sprintf("edgex-asc:install: initialization failure: %v", err))
 		os.Exit(1)
 
@@ -94,66 +82,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	profile, err := cli.Config(hooks.ProfileConfig)
+	// disable the service and handle the autostart logic in the configure hook
+	// as default snap configuration is not available when the install hook runs
+	err = cli.Stop("app-service-configurable", true)
 	if err != nil {
-		hooks.Error(fmt.Sprintf("Reading config 'profile' failed: %v", err))
-		os.Exit(1)
-	}
-
-	if profile == "" {
-		// set default profile
-		err = cli.SetConfig(hooks.ProfileConfig, "default")
-		if err != nil {
-			hooks.Error(fmt.Sprintf("Can't SET DEFAULT PROFILE - %v", err))
-			os.Exit(1)
-		}
-	}
-
-	// If autostart is not explicitly set, default to "no"
-	// as only example service configuration and profiles
-	// are provided by default.
-	autostart, err := cli.Config(hooks.AutostartConfig)
-	if err != nil {
-		hooks.Error(fmt.Sprintf("Reading config 'autostart' failed: %v", err))
-		os.Exit(1)
-	}
-	if autostart == "" {
-		hooks.Debug("edgex-asc: autostart is NOT set, initializing to 'no'")
-		autostart = "no"
-	}
-
-	autostart = strings.ToLower(autostart)
-	if autostart == "true" || autostart == "yes" {
-		if profile == "default" {
-			hooks.Warn(fmt.Sprintf("autostart is %s, but no profile set", autostart))
-			disable = true
-		}
-	} else if autostart == "false" || autostart == "no" {
-		disable = true
-	} else {
-		hooks.Error(fmt.Sprintf("Invalid value for 'autostart' : %s", autostart))
-		os.Exit(1)
-	}
-
-	// disable because there's no initial configuration or autostart has
-	// been explicitly set to false|no.
-	if disable {
-		err = cli.Stop("app-service-configurable", true)
-		if err != nil {
-			hooks.Error(fmt.Sprintf("Can't stop service - %v", err))
-			os.Exit(1)
-		}
-	}
-
-	envJSON, err := cli.Config(hooks.EnvConfig)
-	if err != nil {
-		hooks.Error(fmt.Sprintf("Reading config 'env' failed: %v", err))
-		os.Exit(1)
-	}
-
-	err = hooks.HandleEdgeXConfig("app-service-configurable", envJSON, nil)
-	if err != nil {
-		hooks.Error(fmt.Sprintf("HandleEdgeXConfig failed: %v", err))
+		hooks.Error(fmt.Sprintf("Can't stop service - %v", err))
 		os.Exit(1)
 	}
 }
