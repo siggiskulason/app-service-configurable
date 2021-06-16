@@ -70,6 +70,26 @@ $ sudo snap set edgex-app-service-configurable profile=push-to-core
 ```
 In addition to instructing the service to read a different configuration file, the profile will also be used to name the service when it registers itself to the system.
 
+### Providing additional configuration profiles
+While configuration overrides are a powerful feature, there are certain scenarios (i.e. a profile with a very custom pipeline defined) where being able
+to provide additional configuration profiles is desired. The edgex-app-service-configurable snap supports provisioning of additional configuration
+profiles via content interface. This allows another snap on the system (e.g. a configuration or gadget snap) to declare one or more content interface
+slots that when connected with this snap, allow access to these new profiles.
+
+Here's an example content interface slot definition for a snap providing a single new configuration profile called "mqtt-export-inventory". Ex.
+
+```
+slots:
+  edgex-profiles-config:
+    interface: content
+    content: edgex-profiles-config
+    source:
+      read: [$SNAP/mqtt-export-inventory]
+```
+
+**Note** - the content interface needs to first be connected before the file(s) become visible to app-service-configurable. For more information
+on content interfaces, please refer to the [documentation](https://snapcraft.io/docs/content-interface).
+
 ### Multiple Instances
 Multiple instances of edgex-app-service-configurable can be installed by using snap [Parallel Installs](https://snapcraft.io/docs/parallel-installs). This is an experimental snap feature and must be first be enabled by running this command:
 ```
@@ -110,3 +130,46 @@ $ sudo sed -i -e 's@/vault/config/assets/resp-init.json@/var/snap/edgex-app-serv
 ```
 
 **Note** -- these configuration changes need to be made *before* the service is started for the first time. Otherwise, the recommended approach is to stop the service, delete the existing app-service-configurable configuration in Consul's kv store, and then proceed.
+
+## Service Environment Configuration Overrides
+**Note** - all of the configuration options below must be specified with the prefix: 'env.'
+
+```
+[Service]
+service.boot-timeout            // Service.BootTimeout
+service.health-check-interval   // Service.HealthCheckInterval
+service.host                    // Service.Host
+service.server-bind-addr        // Service.ServerBindAddr
+service.port                    // Service.Port
+service.protocol                // Service.Protocol
+service.max-result-count        // Service.MaxResultCount
+service.max-request-size        // Service.MaxRequestSize
+service.startup-msg             // Service.StartupMsg
+service.request-timeout         // Service.RequestTimeout
+
+[Clients.core-command]
+clients.core-command.port       // Clients.core-command.Port
+
+[Clients.core-data]
+clients.core-data.port          // Clients.core-data.Port
+
+[Clients.core-metadata]
+clients.core-metadata.port      // Clients.core-metadata.Port
+
+[Clients.support-notifications]
+clients.support-notifications.port  // Clients.support-notifications.Port
+
+[Triger]
+[Trigger.EdgexMessageBus]
+trigger.edgex-message-bus.type                             // Trigger.EdgexMessageBus.Type
+
+[Trigger.EdgexMessageBus.SubscribeHost]
+trigger.edgex-message-bus.subscribe-host.port              // Trigger.EdgexMessageBus.SubscribeHost.Port
+trigger.edgex-message-bus.subscribe-host.protocol          // Trigger.EdgexMessageBus.SubscribeHost.Protocol
+trigger.edgex-message-bus.subscribe-host.subscribe-topics  // Trigger.EdgexMessageBus.SubscribeHost.SubscribeTopics
+
+[Trigger.EdgexMessageBus.PublishHost]
+trigger.edgex-message-bus.publish-host.port                // Trigger.EdgexMessageBus.PublishHost.Port
+trigger.edgex-message-bus.publish-host.protocol            // Trigger.EdgexMessageBus.PublishHost.Protocol
+trigger.edgex-message-bus.publish-host.publish-topic       // Trigger.EdgexMessageBus.PublishHost.PublishTopic
+```
