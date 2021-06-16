@@ -32,6 +32,14 @@ confinement: strict
 # geneva release is epoch 3
 epoch: 3
 
+plugs:
+  # This content plug allows new profiles to be added to the service via a config
+  # or gadget snap that defines a matching slot.
+  edgex-profiles-config:
+    interface: content
+    content: edgex-profiles-config
+    target: $SNAP_DATA/config/res
+
 slots:
   edgex-secretstore-token:
     interface: content
