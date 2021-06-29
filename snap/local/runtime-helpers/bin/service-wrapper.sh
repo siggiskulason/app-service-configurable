@@ -10,5 +10,7 @@ if [ ! -z "$profile" ]; then
     fi
 fi
 
+SecretStore_TokenFile="$SNAP_DATA/$profile/secrets-token.json"
+
 $SNAP/bin/app-service-configurable -confdir $SNAP_DATA/config/res $PROFILE_OPT -cp -r
 
